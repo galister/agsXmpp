@@ -33,6 +33,7 @@
  * See LICENSE.txt for details.
  * --------------------------------------------------------------------------*/
 using System.Collections;
+using System.Collections.Generic;
 
 namespace agsXMPP.Xml.xpnet
 {
@@ -41,7 +42,7 @@ namespace agsXMPP.Xml.xpnet
     /// </summary>
     public class NS
     {
-        private Stack m_stack = new Stack();
+        private Stack<Dictionary<string,string>> m_stack = new Stack<Dictionary<string, string>>();
         
         /// <summary>
         /// Create a new stack, primed with xmlns and xml as prefixes.
@@ -58,7 +59,7 @@ namespace agsXMPP.Xml.xpnet
         /// </summary>
         public void PushScope()
         {
-            m_stack.Push(new Hashtable());
+            m_stack.Push(new Dictionary<string, string>());
         }
 
         /// <summary>
@@ -76,7 +77,7 @@ namespace agsXMPP.Xml.xpnet
         /// <param name="uri"></param>
         public void AddNamespace(string prefix, string uri)
         {
-            ((Hashtable)m_stack.Peek()).Add(prefix, uri);
+            m_stack.Peek().Add(prefix, uri);
         }
 
         /// <summary>
@@ -86,10 +87,10 @@ namespace agsXMPP.Xml.xpnet
         /// <returns></returns>
         public string LookupNamespace(string prefix)
         {
-            foreach (Hashtable ht in m_stack)
+            foreach (var ht in m_stack)
             {
 				if ((ht.Count > 0) && (ht.ContainsKey(prefix)))
-                    return (string)ht[prefix];
+                    return ht[prefix];
             }
             return "";
         }
@@ -97,11 +98,8 @@ namespace agsXMPP.Xml.xpnet
         /// <summary>
         /// The current default namespace.
         /// </summary>
-        public string DefaultNamespace
-        {
-            get { return LookupNamespace(string.Empty); }
-        }
-		        
+        public string DefaultNamespace => LookupNamespace(string.Empty);
+
         /// <summary>
         /// Debug output only.
         /// </summary>
@@ -110,7 +108,7 @@ namespace agsXMPP.Xml.xpnet
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             
-            foreach (Hashtable ht in m_stack)
+            foreach (var ht in m_stack)
             {
                 sb.Append("---\n");
                 foreach (string k in ht.Keys)

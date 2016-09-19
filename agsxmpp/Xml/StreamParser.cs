@@ -182,9 +182,7 @@ namespace agsXMPP.Xml
                         case TOK.XML_DECL:
                             // thou shalt use UTF8, and XML version 1.
                             // i shall ignore evidence to the contrary...
-
-                            // TODO: Throw an exception if these assuptions are
-                            // wrong
+                            // TODO: Throw an exception if these assuptions are wrong
                             break;
                         case TOK.ENTITY_REF:
                         case TOK.PI:
@@ -207,8 +205,7 @@ namespace agsXMPP.Xml
             }
             catch (Exception ex)
             {
-                if (OnStreamError != null)
-                    OnStreamError(this, ex);
+                OnStreamError?.Invoke(this, ex);
             }
             finally
             {
@@ -293,10 +290,9 @@ namespace agsXMPP.Xml
 			if (m_root == null)
 			{
 				m_root = newel;
-				//FireOnDocumentStart(m_root);
-				if (OnStreamStart!=null)
-					OnStreamStart(this, m_root);
-			}
+                //FireOnDocumentStart(m_root);
+                OnStreamStart?.Invoke(this, m_root);
+            }
 			else
 			{
 				if (current != null)

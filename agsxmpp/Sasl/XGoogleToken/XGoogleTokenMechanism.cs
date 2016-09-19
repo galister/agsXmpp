@@ -92,7 +92,6 @@ namespace agsXMPP.Sasl.XGoogleToken
         private void OnGetClientAuthRequestStream(IAsyncResult result)
         {
             WebRequest request = (System.Net.WebRequest)result.AsyncState;
-            Stream outputStream = request.EndGetRequestStream(result);
 
             string data = null;
             data += "Email=" + base.XmppClientConnection.MyJID.Bare;
@@ -104,8 +103,8 @@ namespace agsXMPP.Sasl.XGoogleToken
             
             
             byte[] bytes = Encoding.UTF8.GetBytes(data);
-            outputStream.Write(bytes, 0, bytes.Length);
-            outputStream.Close();
+            using (var outputStream = request.EndGetRequestStream(result))
+                outputStream.Write(bytes, 0, bytes.Length);
 
             request.BeginGetResponse(new AsyncCallback(OnGetClientAuthResponse), request);
         }
@@ -114,24 +113,21 @@ namespace agsXMPP.Sasl.XGoogleToken
         {
             try
             {
-                WebRequest request = (WebRequest)result.AsyncState;
-                HttpWebResponse response = (HttpWebResponse)request.EndGetResponse(result);
-
-                if (response.StatusCode == HttpStatusCode.OK)
+                WebRequest request = (WebRequest) result.AsyncState;
+                using (var response = (HttpWebResponse) request.EndGetResponse(result))
                 {
-                    Stream dataStream = response.GetResponseStream();
+                    if (response.StatusCode == HttpStatusCode.OK)
+                    {
+                        using (var dataStream = response.GetResponseStream())
+                            ParseClientAuthResponse(dataStream);
 
-                    ParseClientAuthResponse(dataStream);
+                        _Base64Token = GetToken(_Auth);
 
-                    dataStream.Close();
-                    response.Close();
-
-                    _Base64Token = GetToken(_Auth);
-
-                    DoSaslAuth();
+                        DoSaslAuth();
+                    }
+                    else
+                        base.XmppClientConnection.Close();
                 }
-                else
-                    base.XmppClientConnection.Close();
             }
             catch (WebException we)
             {
@@ -145,21 +141,21 @@ namespace agsXMPP.Sasl.XGoogleToken
         }             
 
         private void ParseClientAuthResponse(Stream responseStream)
-        {            
-            StreamReader reader = new StreamReader(responseStream);
-            
-            string line;
-            while ((line = reader.ReadLine()) != null)
-            {
-                if (line.StartsWith("SID="))
-                    _Sid = line.Substring(4);
-                else if(line.StartsWith("LSID="))
-                    _Lsid = line.Substring(5);
-                else if (line.StartsWith("Auth="))
-                    _Auth = line.Substring(5);
-            }
+        {
 
-            reader.Close();            
+            using (var reader = new StreamReader(responseStream))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.StartsWith("SID="))
+                        _Sid = line.Substring(4);
+                    else if (line.StartsWith("LSID="))
+                        _Lsid = line.Substring(5);
+                    else if (line.StartsWith("Auth="))
+                        _Auth = line.Substring(5);
+                }
+            }
         }
         
         private string GetToken(string line)

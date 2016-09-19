@@ -303,14 +303,16 @@ namespace agsXMPP
 		}
 
 		public virtual  void StreamParserOnStreamElement	(object sender, Node e)
-		{
-			this.FireOnReadXml(this, e.ToString());
+        {
+            this.FireOnReadXml(this, e.ToString());
 		}
 		public virtual void StreamParserOnStreamError		(object sender, Exception ex)
 		{
+            Console.WriteLine(ex);
 		}
         public virtual void StreamParserOnError             (object sender, Exception ex)
         {
+            Console.WriteLine(ex);
             FireOnError(sender, ex);
         }
 		#endregion

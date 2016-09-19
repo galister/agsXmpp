@@ -21,7 +21,7 @@
 
 using System;
 using System.Collections;
-
+using System.Collections.Generic;
 using agsXMPP.Xml.Dom;
 
 namespace agsXMPP.Factory
@@ -319,7 +319,7 @@ namespace agsXMPP.Factory
 		/// <param name="tag">FQN</param>
 		/// <param name="ns"></param>
 		/// <param name="t"></param>
-		public static void AddElementType(string tag, string ns, System.Type t)
+		public static void AddElementType(string tag, string ns, Type t)
 		{
             ElementType et = new ElementType(tag, ns);
             string key = et.ToString();

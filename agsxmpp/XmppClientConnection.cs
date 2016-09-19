@@ -55,6 +55,7 @@ using agsXMPP.Net.Dns;
 
 
 using agsXMPP.Idn;
+using Features = agsXMPP.protocol.stream.Features;
 
 namespace agsXMPP
 {
@@ -289,7 +290,7 @@ namespace agsXMPP
             get { return m_UseSso; }
             set
             {
-                if (Util.Runtime.IsMono() && Util.Runtime.IsUnix())
+                if (Util.Runtime.IsMono())
                     throw new NotImplementedException();
                 
                 m_UseSso = value;
@@ -712,7 +713,7 @@ namespace agsXMPP
             base.SocketOnError(sender, ex);
 
             if ((ex.GetType() == typeof(ConnectTimeoutException) 
-                || (ex.GetType() == typeof(SocketException) && ((SocketException)ex).ErrorCode == 10061))
+                || (ex.GetType() == typeof(SocketException) && ((SocketException)ex).SocketErrorCode == SocketError.ConnectionRefused)) // 10061
                 && _SRVRecords != null
                 && _SRVRecords.Length > 1)
             {         
@@ -1296,7 +1297,7 @@ namespace agsXMPP
 			}
 			else if(iq.Type == IqType.error)
 			{
-				/* 
+			    /* 
 				 * <iq xmlns="jabber:client" id="agsXMPP_2" type="error">
 				 *		<query xmlns="jabber:iq:auth">
 				 *			<username>test</username>
@@ -1307,16 +1308,14 @@ namespace agsXMPP
 				 * </iq>
 				 * 
 				 */
-                if (OnAuthError!=null)
-					OnAuthError(this, iq);
+			    OnAuthError?.Invoke(this, iq);
 			}
 			
 		}
 
 		internal void FireOnAuthError(Element e)
 		{
-			if (OnAuthError!=null)
-				OnAuthError(this, e);
+		    OnAuthError?.Invoke(this, e);
 		}
         
 		#region << StreamParser Events >>
@@ -1502,9 +1501,9 @@ namespace agsXMPP
                 dummyEl.Namespace = Uri.CLIENT;
 
                 dummyEl.AddChild(e);
-                string toSend = dummyEl.ToString();
+                string toSend = dummyEl.FirstChild.ToString();
 
-                Send(toSend.Substring(25, toSend.Length - 25 - 4));
+                Send(toSend.Substring(38));
             }
             else
                 base.Send(e);
@@ -1538,9 +1537,8 @@ namespace agsXMPP
 			m_Binded			= false;
 
 			DestroyKeepAliveTimer();
-			
-			if (OnClose!=null)
-				OnClose(this);			
+
+		    OnClose?.Invoke(this);
 		}
 
 		internal void Reset()
@@ -1554,14 +1552,12 @@ namespace agsXMPP
 		
 		internal void DoRaiseEventBinded()
 		{
-			if (OnBinded!=null)
-				OnBinded(this);
+		    OnBinded?.Invoke(this);
 		}
 
         internal void DoRaiseEventBindError(Element iq)
         {
-            if (OnBindError != null)
-                OnBindError(this, iq);
+            OnBindError?.Invoke(this, iq);
         }
         
 		#region << SASL Handler Events >>
@@ -1576,11 +1572,10 @@ namespace agsXMPP
 		{
             if (KeepAlive)
                 CreateKeepAliveTimer();
-                       
-			if (OnLogin!=null)
-				OnLogin(this);
-				
-			if(m_AutoAgents)
+
+		    OnLogin?.Invoke(this);
+
+		    if(m_AutoAgents)
 				RequestAgents();
 				
 			if (m_AutoRoster)

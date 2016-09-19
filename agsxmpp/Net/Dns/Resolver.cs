@@ -186,7 +186,7 @@ namespace agsXMPP.Net.Dns
 					_uniqueId++;
 
 					// close the socket
-					socket.Close();
+					socket.Dispose();
 				}
 			}
 		

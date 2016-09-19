@@ -77,8 +77,8 @@ namespace agsXMPP.Sasl.Scram
         {
             var random = new Byte[LENGHT_CLIENT_NONE];
 
-            var rng = new RNGCryptoServiceProvider();
-            rng.GetBytes(random);
+            using(var rng = RandomNumberGenerator.Create())
+                rng.GetBytes(random);
 
             clientNonce = random;
             clientNonceB64 = Convert.ToBase64String(random);

@@ -32,7 +32,7 @@ namespace agsXMPP.Net.Dns
 	/// <summary>
 	/// Thrown when the server does not respond
 	/// </summary>	
-	public class NoResponseException : SystemException
+	public class NoResponseException : Exception
 	{
 		public NoResponseException()
 		{

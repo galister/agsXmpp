@@ -26,6 +26,7 @@ using System.Text;
 using System.Threading;
 using System.Collections;
 using System.Security.Cryptography;
+using Helpers;
 
 #if CF
 using agsXMPP.util;
@@ -67,7 +68,7 @@ namespace agsXMPP.Net
 		// set this lower on embedded devices because the key generation is slow there
 		private int				m_CountKeys		= 32;
 #endif
-		private WebProxy		m_Proxy			= null;
+		private SimpleProxy     m_Proxy			= null;
 
 		/// <summary>
 		/// because the client socket is no presintant socket we return always true
@@ -100,7 +101,7 @@ namespace agsXMPP.Net
 			set { m_CountKeys = value;}
 		}
 
-		public WebProxy Proxy
+		public SimpleProxy Proxy
 		{
 			get { return m_Proxy; }
 			set { m_Proxy = value; }
@@ -290,31 +291,26 @@ namespace agsXMPP.Net
 				req.Method          = METHOD;
 				//req.KeepAlive		= true;
 				req.ContentType     = CONTENT_TYPE;
-				req.ContentLength	= bytes.Length;
-				req.Timeout         = 5000;
+				//req.ContentLength	= bytes.Length;
+				//req.Timeout         = 50
 
-                Stream outputStream;
                 try
                 {
-                    outputStream = req.GetRequestStream();
+                    using (var outputStream = req.GetRequestStreamAsync().WaitForResult())
+                        outputStream.Write(bytes, 0, bytes.Length);
                 }
                 catch (Exception ex)
                 {
                     base.FireOnError(ex);
                     Disconnect();
                     return;
-                }
-				
-
-				outputStream.Write (bytes, 0, bytes.Length);
-		
-				outputStream.Close ();			
+                }	
 		
 				// This does the Webrequest. So catch errors here
 				HttpWebResponse resp;
 				try
 				{
-					 resp = (HttpWebResponse) req.GetResponse();
+					 resp = (HttpWebResponse) req.GetResponseAsync().WaitForResult();
 				}
 				catch(Exception ex)
 				{
@@ -329,82 +325,79 @@ namespace agsXMPP.Net
 					FireOnError(new PollSocketException("unexpected status code " + resp.StatusCode.ToString()));
 					return;
 				}
+			    byte[] recv;
+                using (var rs = resp.GetResponseStream())
+			    using (var ms = new MemoryStream())
+			    {
+			        int readlen;
+			        byte[] readbuf = new byte[1024];
+			        while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
+			        {
+			            ms.Write(readbuf, 0, readlen);
+			        }
 
-				Stream rs = resp.GetResponseStream();
+			        recv = ms.ToArray();
 
-				int readlen;
-				byte[] readbuf = new byte[1024];
-				MemoryStream ms = new MemoryStream();
-				while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
-				{
-					ms.Write(readbuf, 0, readlen);
-				}
-		
-				byte[] recv = ms.ToArray();
+			        // Read Cookies from Header
+			        // Set-Cookie: ID=7776:2054; path=/webclient/; expires=-1
+			        WebHeaderCollection headers = resp.Headers;
 
-				// Read Cookies from Header
-				// Set-Cookie: ID=7776:2054; path=/webclient/; expires=-1
-				WebHeaderCollection headers = resp.Headers;
-            
-				// Check for any cookies
-				// Didnt get the .NET CookieCollection classes working correct
-				// So read it by hand, i cookie is only another simple header
-				if (headers["Set-Cookie"] != null)
-				{
-					string header = headers["Set-Cookie"];
-					string[] cookies = header.Split( (char) ';');
-			
-					Hashtable htCookies = new Hashtable();
-					foreach(string cookie in cookies)
-					{
-						string[] vals = cookie.Split( (char) '=');
-						if (vals.Length == 2)					
-							htCookies.Add(vals[0], vals[1]);				
-					}
+			        // Check for any cookies
+			        // Didnt get the .NET CookieCollection classes working correct
+			        // So read it by hand, i cookie is only another simple header
+			        if (headers["Set-Cookie"] != null)
+			        {
+			            string header = headers["Set-Cookie"];
+			            string[] cookies = header.Split((char) ';');
 
-					if (htCookies.ContainsKey("ID"))
-					{
-						string id = htCookies["ID"] as string;
-						// if ID ends with its an error message
-						if ( !id.EndsWith(":0"))
-						{
-							// if me dont have the ID yet cache it
-							if (m_ID == null)
-								m_ID = id;
-						}
-						else
-						{
-							// Handle Errors
-							switch (id)
-							{
-								case "0:0":
-									// 3.1.1 Unknown Error
-									// Server returns ID=0:0.
-									// The response body can contain a textual error message.									
-									return;
-								case "-1:0":
-									// 3.1.2 Server Error
-									// Server returns ID=-1:0
-									return;
-								case "-2:0":
-									// 3.1.3 Bad Request
-									// Server returns ID=-2:0
-									return;
-								case "-3:0":
-									// 3.1.4 Key Sequence Error
-									// Server returns ID=-3:0
-									return;
-							}
-						}
-					}
-				}
+			            Hashtable htCookies = new Hashtable();
+			            foreach (string cookie in cookies)
+			            {
+			                string[] vals = cookie.Split((char) '=');
+			                if (vals.Length == 2)
+			                    htCookies.Add(vals[0], vals[1]);
+			            }
 
-                // cleanup webrequest resources
-                ms.Close();
-                rs.Close();
-                resp.Close();
+			            if (htCookies.ContainsKey("ID"))
+			            {
+			                string id = htCookies["ID"] as string;
+			                // if ID ends with its an error message
+			                if (!id.EndsWith(":0"))
+			                {
+			                    // if me dont have the ID yet cache it
+			                    if (m_ID == null)
+			                        m_ID = id;
+			                }
+			                else
+			                {
+			                    // Handle Errors
+			                    switch (id)
+			                    {
+			                        case "0:0":
+			                            // 3.1.1 Unknown Error
+			                            // Server returns ID=0:0.
+			                            // The response body can contain a textual error message.									
+			                            return;
+			                        case "-1:0":
+			                            // 3.1.2 Server Error
+			                            // Server returns ID=-1:0
+			                            return;
+			                        case "-2:0":
+			                            // 3.1.3 Bad Request
+			                            // Server returns ID=-2:0
+			                            return;
+			                        case "-3:0":
+			                            // 3.1.4 Key Sequence Error
+			                            // Server returns ID=-3:0
+			                            return;
+			                    }
+			                }
+			            }
+			        }
+                }
+                resp.Dispose();
 
-				if (recv.Length > 0)
+                if (recv.Length > 0)
 				{
 					//Console.WriteLine("RECV: " + Encoding.UTF8.GetString(recv));
 					FireOnReceive(recv, recv.Length);

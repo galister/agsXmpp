@@ -35,7 +35,7 @@ namespace agsXMPP.Xml.Dom
 		// Member Variables
 		private		string			m_TagName;
 		private		string			m_Prefix;
-        private     ListDictionary  m_Attributes;
+        private     Dictionary<string,string> m_Attributes;
 		private		Text			m_Value				= new Text();
 
 		public Element() 
@@ -43,7 +43,7 @@ namespace agsXMPP.Xml.Dom
 			NodeType = NodeType.Element;
 			AddChild(m_Value);
 
-            m_Attributes = new ListDictionary();
+            m_Attributes = new Dictionary<string, string>();
 
             m_TagName	= "";
 			Value		= "";			
@@ -115,12 +115,9 @@ namespace agsXMPP.Xml.Dom
 			}
 		}
       
-        public ListDictionary Attributes
-        {
-            get { return m_Attributes; }
-        }
+        public Dictionary<string, string> Attributes => m_Attributes;
 
-		public object GetAttributeEnum(string name, Type enumType)
+	    public object GetAttributeEnum(string name, Type enumType)
 		{
 			string att = GetAttribute(name);
 			if ((att == null))
@@ -225,7 +222,7 @@ namespace agsXMPP.Xml.Dom
 
 		public bool HasAttribute(string name)
 		{
-			return Attributes.Contains(name);
+			return Attributes.ContainsKey(name);
 		}
 		
 		/// <summary>
@@ -874,10 +871,8 @@ namespace agsXMPP.Xml.Dom
         {
             using (StringWriter sw = new StringWriter())
             {
-                using (XmlTextWriter tw = new XmlTextWriter(sw))
+                using (XmlWriter tw = XmlWriter.Create(sw))
                 {
-                    tw.Formatting = Formatting.None;
-
                     if (Prefix == null)
                         tw.WriteStartElement(TagName);
                     else
@@ -900,8 +895,6 @@ namespace agsXMPP.Xml.Dom
                     }
 
                     tw.Flush();
-                    tw.Close();
-
                     return sw.ToString().Replace("/>", ">");
                 }
             }

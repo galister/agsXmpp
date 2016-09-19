@@ -12,14 +12,5 @@ namespace agsXMPP.Util
             
             return false;
         }
-
-        public static bool IsUnix()
-        {
-            int p = (int) Environment.OSVersion.Platform;
-            if ((p == 4) || (p == 6) || (p == 128))
-                return true;
-            
-            return false;
-        }
     }
 }

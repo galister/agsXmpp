@@ -86,10 +86,9 @@ namespace agsXMPP.Xml.Dom
 			{
 				try
 				{
-					using(var sr = new StreamReader(filename))
+					using(var sr = new StreamReader(File.OpenRead(filename)))
                     {
 					    DomLoader.Load(sr, this);
-					    sr.Close();					
 					    return true;
                     }
 				}
@@ -108,7 +107,6 @@ namespace agsXMPP.Xml.Dom
                 using(var sr = new StreamReader(stream))
                 {
                     DomLoader.Load(sr, this);
-                    sr.Close();
                     return true;
                 }
             }
@@ -120,11 +118,10 @@ namespace agsXMPP.Xml.Dom
 		
 		public void Save(string filename)
 		{
-			using (var w = new StreamWriter(filename))
+			using (var w = new StreamWriter(File.OpenWrite(filename)))
             {
-			    w.Write(ToString(System.Text.Encoding.UTF8));
+			    w.Write(ToString());
 			    w.Flush();
-			    w.Close();
             }
 		}
 		#endregion

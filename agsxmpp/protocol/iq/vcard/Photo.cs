@@ -21,12 +21,14 @@
 #if !CF
 using System;
 using System.IO;
+using System.Threading.Tasks;
 #if !SL
 using System.Drawing;
 using System.Drawing.Imaging;
 #endif
 using agsXMPP.Xml.Dom;
 
+using Helpers;
 namespace agsXMPP.protocol.iq.vcard
 {
 	/// <summary>
@@ -112,6 +114,7 @@ namespace agsXMPP.protocol.iq.vcard
             //create temporary
             Image temp = new Bitmap(image.Width, image.Height);            
             //get graphics
+            
             Graphics g = Graphics.FromImage(temp);
             
             //copy image
@@ -122,7 +125,7 @@ namespace agsXMPP.protocol.iq.vcard
 
             MemoryStream ms = new MemoryStream();
             temp.Save(ms, format);
-            byte[] buf = ms.GetBuffer();
+            byte[] buf = ms.ToArray();
             SetTagBase64("BINVAL", buf);
         }
 
@@ -169,7 +172,7 @@ namespace agsXMPP.protocol.iq.vcard
 					else if (HasTag("EXTVAL"))
 					{
 						System.Net.WebRequest req = System.Net.WebRequest.Create(GetTag("EXTVAL"));
-						System.Net.WebResponse response = req.GetResponse();
+					    System.Net.WebResponse response = req.GetResponseAsync().WaitForResult();
 						return new System.Drawing.Bitmap(response.GetResponseStream());
 					}
 					else

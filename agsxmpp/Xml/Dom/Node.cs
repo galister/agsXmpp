@@ -109,42 +109,15 @@ namespace agsXMPP.Xml.Dom
 		{
 			m_ChildNodes.Add(e);
 		}
-		
-		/// <summary>
-		/// Returns the Xml of the current Element (Node) as string
-		/// </summary>
-		public override string ToString()
-		{
-			return BuildXml(this, Formatting.None, 0, ' ');
-		}
-
-		public string ToString(Encoding enc)
-		{
-            using (var tw = new StringWriterWithEncoding(enc))
-            {
-                //System.IO.StringWriter tw = new StringWriter();
-                using (var w = new XmlTextWriter(tw))
-                {
-                    // Format the Output. So its human readable in notepad
-                    // Without that everyting is in one line
-                    w.Formatting = Formatting.Indented;
-                    w.Indentation = 3;
-
-                    WriteTree(this, w, null);
-
-                    return tw.ToString();
-                }
-            }
-		}
 
 	    /// <summary>
 		/// returns the Xml, difference to the Xml property is that you can set formatting porperties
 		/// </summary>
 		/// <param name="format"></param>
 		/// <returns></returns>
-		public string ToString(Formatting format)
+		public override string ToString()
 		{
-			return BuildXml(this, format, 3, ' ');
+			return BuildXml(this, false);
 		}
 
 		/// <summary>
@@ -153,35 +126,35 @@ namespace agsXMPP.Xml.Dom
 		/// <param name="format"></param>
 		/// <param name="indent"></param>
 		/// <returns></returns>
-		public string ToString(Formatting format, int indent)
+		public string ToString(bool pretty)
 		{			
-			return BuildXml(this, format, indent, ' ');
+			return BuildXml(this, pretty);
 		}
 
 		#region << Xml Serializer Functions >>
 		
-		private string BuildXml(Node e, Formatting format, int indent, char indentchar)
+		private string BuildXml(Node e, bool indent)
 		{
 		    if ( e != null )
 			{
-				using(var tw = new StringWriter())
-                {
-				    using(var w = new XmlTextWriter(tw))
-                    {
-				        w.Formatting	= format;
-				        w.Indentation	= indent;
-				        w.IndentChar	= indentchar;
-
-				        WriteTree(this, w, null);
-
-				        return tw.ToString();
-                    }
-                }
+				var w = new XmlWriterSettings
+				{
+				    Encoding = Encoding.UTF8,
+				    Indent = indent,
+				    IndentChars = "   "
+				};
+			    using (var sr = new StringWriterWithEncoding(Encoding.UTF8))
+			    {
+			        using (var xw = XmlWriter.Create(sr, w))
+			            WriteTree(this, xw, null);
+                    sr.Flush();
+			        return sr.ToString();
+			    }
 			}
 		    return "";
 		}
 
-	    private void WriteTree(Node e, XmlTextWriter tw, Node parent) 
+	    private void WriteTree(Node e, XmlWriter tw, Node parent) 
 		{		
 			if (e.NodeType == NodeType.Document)
 			{
@@ -226,9 +199,9 @@ namespace agsXMPP.Xml.Dom
 				Element el = e as Element;
 
 				if (el.Prefix==null)
-					tw.WriteStartElement( el.TagName );
+					tw.WriteStartElement( el.TagName, el.Namespace);
 				else
-					tw.WriteStartElement( el.Prefix + ":" + el.TagName );
+					tw.WriteStartElement( el.Prefix , el.TagName , el.Namespace);
 
 				// Write Namespace
 				if ( (parent == null || parent.Namespace != el.Namespace)
@@ -237,14 +210,20 @@ namespace agsXMPP.Xml.Dom
 					)
 				{
 					if (el.Prefix==null)
-						tw.WriteAttributeString("xmlns", el.Namespace);
+						tw.WriteAttributeString("xmlns", null, null, el.Namespace);
 					else
-						tw.WriteAttributeString("xmlns:" + el.Prefix , el.Namespace);
-				}	
+						tw.WriteAttributeString("xmlns", el.Prefix, null, el.Namespace);
+				}
 
-				foreach (string attName in el.Attributes.Keys) 
-				{				
-					tw.WriteAttributeString(attName, el.Attribute(attName));				
+				foreach (var att in el.Attributes) 
+				{
+				    if (att.Key.Contains(":"))
+				    {
+				        var splat = att.Key.Split(':');
+                        tw.WriteAttributeString(splat[0], splat[1], null, att.Value);
+                    }
+                    else
+					    tw.WriteAttributeString(att.Key, att.Value);				
 				}
 			
 				//tw.WriteString(el.Value);
@@ -255,7 +234,7 @@ namespace agsXMPP.Xml.Dom
 					{						
 						WriteTree(n, tw, e);            
 					}
-					tw.WriteEndElement();
+				    tw.WriteEndElement();
 				}    
 				else 
 				{

@@ -20,13 +20,15 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */ 
 
 using System;
-using System.Collections;
+using System.Collections.Generic;
+using agsXMPP.protocol.iq.privacy;
+
 namespace agsXMPP.Xml.Dom
 {
 	/// <summary>
 	/// 
 	/// </summary>	
-	public class NodeList : CollectionBase
+	public class NodeList : List<Node>
     {
 		/// <summary>
 		/// Owner (Parent) of the ChildElement Collection
@@ -42,7 +44,7 @@ namespace agsXMPP.Xml.Dom
 			m_Owner = owner;            
 		}
 
-        public void Add(Node e)
+        public new void Add(Node e)
         {
             // can't add a empty node, so return immediately
             // Some people tried this which caused an error
@@ -58,7 +60,7 @@ namespace agsXMPP.Xml.Dom
 
             e.m_Index = Count;
 
-            List.Add(e);
+            base.Add(e);
         }
 	
 		// Method implementation from the CollectionBase class
@@ -71,31 +73,21 @@ namespace agsXMPP.Xml.Dom
 				// This exception will be written to the calling function             
 				throw new Exception("Index out of bounds");            
 			}        
-			List.RemoveAt(index);
+			RemoveAt(index);
 			RebuildIndex(index);
 		}
 	
 		public void Remove(Element e)
 		{
 			int idx = e.Index;
-			List.Remove(e);
+			base.Remove(e);
 			RebuildIndex(idx);
 		}
 	
 		public Node Item(int index) 
 		{
-			return (Node) this.List[index];
+			return this[index];
 		}
-
-        public object[] ToArray()
-        {
-            object[] ar = new object[this.List.Count];
-            for (int i = 0; i < this.List.Count; i++)
-            {
-                ar[i] = this.List[i];
-            }
-            return ar;
-        }
 
 		internal void RebuildIndex()
 		{
@@ -106,7 +98,7 @@ namespace agsXMPP.Xml.Dom
 		{
 			for (int i = start; i < Count; i++)
 			{
-                Node node = (Node) List[i];
+                Node node = this[i];
 				node.m_Index = i;
 			}			
 		}       

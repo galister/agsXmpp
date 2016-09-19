@@ -49,7 +49,7 @@ namespace agsXMPP.Util
 
         public static byte[] Sha1HashBytes(byte[] pass)
         {
-            using (var sha = new SHA1Managed())
+            using (var sha = SHA1.Create())
             {
                 return sha.ComputeHash(pass);
             }
@@ -152,7 +152,7 @@ namespace agsXMPP.Util
 #if !(CF || CF_2)
         public static byte[] HMAC(byte[] key, byte[] data)
         {
-            using (var hmacsha1 = new HMACSHA1(key, true))
+            using (var hmacsha1 = new HMACSHA1(key))
             {
                 byte[] bytes = hmacsha1.ComputeHash(data);
                 return bytes;

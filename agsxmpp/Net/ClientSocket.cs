@@ -25,10 +25,8 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Text;
-using System.Configuration;
 using System.Collections;
-using System.Diagnostics;
-
+using System.Threading.Tasks;
 #if SSL
 using System.Net.Security;
 using System.Security.Authentication;
@@ -42,6 +40,7 @@ using Org.BouncyCastle.Crypto.Tls;
 using agsXMPP.IO.Compression;
 
 using agsXMPP;
+using Helpers;
 
 namespace agsXMPP.Net
 {
@@ -66,7 +65,7 @@ namespace agsXMPP.Net
         Stream m_NetworkStream = null;
 
 
-        const int BUFFERSIZE = 1024;
+        const int BUFFERSIZE = 1024*4;
         private byte[] m_ReadBuffer = null;
 
         private bool m_SSL = false;
@@ -177,7 +176,7 @@ namespace agsXMPP.Net
             Connect();
         }
 
-        public override void Connect()
+        public override async void Connect()
         {
             base.Connect();
 
@@ -197,7 +196,7 @@ namespace agsXMPP.Net
                 // first check if a IP adress was passed as Hostname            
                 if (!IPAddress.TryParse(Address, out ipAddress))
                 {
-                    IPHostEntry ipHostInfo = System.Net.Dns.GetHostEntry(Address);
+                    IPHostEntry ipHostInfo = System.Net.Dns.GetHostEntryAsync(Address).WaitForResult();
                     ipAddress = ipHostInfo.AddressList[0];
                 }
 #endif           
@@ -208,8 +207,7 @@ namespace agsXMPP.Net
                 // take very long to establish the connection with the default timeout. So we handle custom
                 // connect timeouts with a timer
                 m_ConnectTimedOut = false;
-                TimerCallback timerDelegate = new TimerCallback(connectTimeoutTimerDelegate);
-                connectTimeoutTimer = new Timer(timerDelegate, null, ConnectTimeout, ConnectTimeout);
+                connectTimeoutTimer = new Timer(connectTimeoutTimerDelegate, null, (int)ConnectTimeout, Timeout.Infinite);
 
 #if !(CF || CF_2)
                 // IPV6 Support for .NET 2.0
@@ -221,49 +219,41 @@ namespace agsXMPP.Net
                 // CF, there is no IPV6 support yet
                 _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 #endif
-                _socket.BeginConnect(endPoint, new AsyncCallback(EndConnect), null);
+                await _socket.ConnectAsync(endPoint);
+
+                if (m_ConnectTimedOut)
+                {
+                    FireOnError(new ConnectTimeoutException("Attempt to connect timed out"));
+                }
+                else
+                {
+                    try
+                    {
+                        connectTimeoutTimer.Dispose();
+                        m_Stream = new NetworkStream(_socket, false);
+                        m_NetworkStream = m_Stream;
+#if SSL
+                    if (m_SSL)
+                        InitSSL();
+#endif
+                       FireOnConnect();
+                       Receive();
+                    }
+                    catch (Exception ex)
+                    {
+                        FireOnError(ex);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                base.FireOnError(ex);
+                FireOnError(ex);
             }
         }
 
         private void EndConnect(IAsyncResult ar)
         {
-            if (m_ConnectTimedOut)
-            {
-                base.FireOnError(new ConnectTimeoutException("Attempt to connect timed out"));
-            }
-            else
-            {
-                try
-                {
-                    // stop the timeout timer
-                    connectTimeoutTimer.Dispose();
-
-                    // pass connection status with event
-                    _socket.EndConnect(ar);
-
-                    m_Stream = new NetworkStream(_socket, false);
-
-                    m_NetworkStream = m_Stream;
-
-#if SSL
-                    if (m_SSL)
-                        InitSSL();
-#endif
-
-                    FireOnConnect();
-
-                    // Setup Receive Callback
-                    this.Receive();
-                }
-                catch (Exception ex)
-                {
-                    base.FireOnError(ex);
-                }
-            }
+            
         }
 
         /// <summary>
@@ -274,7 +264,7 @@ namespace agsXMPP.Net
         {
             connectTimeoutTimer.Dispose();
             m_ConnectTimedOut = true;
-            _socket.Close();
+            _socket.Dispose();
         }
 
 #if SSL
@@ -287,19 +277,14 @@ namespace agsXMPP.Net
 			
             SslProtocols protocol = SslProtocols.Tls;
 			return InitSSL(protocol);
-		}           
+		}
 
-		
-		private bool InitSSL()
-		{
-            return InitSSL(SslProtocols.Default);
-		}        
-        
+
         /// <summary>
 		/// 
 		/// </summary>
 		/// <param name="protocol"></param>		
-        private bool InitSSL(SslProtocols protocol)
+        private bool InitSSL(SslProtocols protocol = SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls)
 		{            
 			m_SSLStream = new SslStream(
                 m_Stream,
@@ -309,7 +294,7 @@ namespace agsXMPP.Net
                 );			
             try
             {
-                m_SSLStream.AuthenticateAsClient(base.Address, null, protocol, true);
+                m_SSLStream.AuthenticateAsClientAsync(base.Address, null, protocol, true).WaitForResult();
                 // Display the properties and settings for the authenticated stream.
                 //DisplaySecurityLevel(m_SSLStream);
                 //DisplaySecurityServices(m_SSLStream);
@@ -358,24 +343,6 @@ namespace agsXMPP.Net
         {
             Console.WriteLine("Can read: {0}, write {1}", stream.CanRead, stream.CanWrite);
             Console.WriteLine("Can timeout: {0}", stream.CanTimeout);
-        }
-
-        private void DisplayCertificateInformation(SslStream stream)
-        {
-            //Console.WriteLine("Certificate revocation list checked: {0}", stream.CheckCertRevocationStatus);
-            // Display the properties of the client's certificate.
-            X509Certificate remoteCertificate = stream.RemoteCertificate;
-            if (stream.RemoteCertificate != null)
-            {
-                Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
-                    remoteCertificate.Subject,
-                    remoteCertificate.GetEffectiveDateString(),
-                    remoteCertificate.GetExpirationDateString());
-            }
-            else
-            {
-                Console.WriteLine("Remote certificate is null.");
-            }
         }
                
         #endregion
@@ -472,7 +439,7 @@ namespace agsXMPP.Net
             {
                 // next, close the socket which terminates any pending
                 // async operations
-                _socket.Close();
+                _socket.Dispose();
             }
             catch { }
 
@@ -497,7 +464,7 @@ namespace agsXMPP.Net
             {
                 try
                 {
-                    base.FireOnSend(bData, bData.Length);
+                    FireOnSend(bData, bData.Length);
 
                     //Console.WriteLine("Socket OnSend: " + System.Text.Encoding.UTF8.GetString(bData, 0, bData.Length));
 
@@ -515,21 +482,21 @@ namespace agsXMPP.Net
 
                     // .NET 2.0 SSL Stream issues when sending multiple async packets
                     // http://forums.microsoft.com/MSDN/ShowPost.aspx?PostID=124213&SiteID=1
-                    if (m_PendingSend)
+                    
+                    m_SendQueue.Enqueue(bData);
+                    m_PendingSend = true;
+                    try
                     {
-                        m_SendQueue.Enqueue(bData);
+                        while (m_SendQueue.Count > 0)
+                        {
+                            bData = (byte[]) m_SendQueue.Dequeue();
+                            m_NetworkStream.Write(bData, 0, bData.Length);
+                        }
+                        m_PendingSend = false;
                     }
-                    else
+                    catch (Exception)
                     {
-                        m_PendingSend = true;
-                        try
-                        {
-                            m_NetworkStream.BeginWrite(bData, 0, bData.Length, new AsyncCallback(EndSend), null);
-                        }
-                        catch (Exception)
-                        {
-                            Disconnect();
-                        }
+                        Disconnect();
                     }
                 }
                 catch (Exception)
@@ -537,80 +504,45 @@ namespace agsXMPP.Net
 
                 }
             }
+
         }
 
         /// <summary>
         /// Read data from server.
         /// </summary>
-        private void Receive()
-        {
-            m_NetworkStream.BeginRead(m_ReadBuffer, 0, BUFFERSIZE, new AsyncCallback(EndReceive), null);
-        }
-
-        private void EndReceive(IAsyncResult ar)
+        private async void Receive()
         {
             try
             {
-                int nBytes;
-                nBytes = m_NetworkStream.EndRead(ar);
-                if (nBytes > 0)
+
+                do
                 {
-                    // uncompress Data if we are on a compressed socket
-                    if (m_Compressed)
+                    int nBytes = await m_NetworkStream.ReadAsync(m_ReadBuffer, 0, BUFFERSIZE, CancellationToken.None);
+                    if (nBytes > 0)
                     {
-                        byte[] buf = Decompress(m_ReadBuffer, nBytes);
-                        base.FireOnReceive(buf, buf.Length);
-                        // for compression debug statistics
-                        //base.FireOnInComingCompressionDebug(this, m_ReadBuffer, nBytes, buf, buf.Length);
+                        if (m_Compressed)
+                        {
+                            byte[] buf = Decompress(m_ReadBuffer, nBytes);
+                            FireOnReceive(buf, buf.Length);
+                        }
+                        else
+                        {
+                            FireOnReceive(m_ReadBuffer, nBytes);
+                        }
                     }
                     else
                     {
-                        //Console.WriteLine("Socket OnReceive: " + System.Text.Encoding.UTF8.GetString(m_ReadBuffer, 0, nBytes));                        
-                        // Raise the receive event
-                        base.FireOnReceive(m_ReadBuffer, nBytes);
+                        Disconnect();
+                        return;
                     }
-                    // Setup next Receive Callback
-                    if (this.Connected)
-                        this.Receive();
-                }
-                else
-                {
-                    Disconnect();
-                }
+                } while (Connected);
             }
             catch (ObjectDisposedException)
             {
-                //object already disposed, just exit
-                return;
             }
             catch (System.IO.IOException ex)
             {
-                //Console.WriteLine("\nSocket Exception: " + ex.Message);
                 Disconnect();
-            }
-        }
-
-        private void EndSend(IAsyncResult ar)
-        {
-            lock (this)
-            {
-                try
-                {
-                    m_NetworkStream.EndWrite(ar);
-                    if (m_SendQueue.Count > 0)
-                    {
-                        byte[] bData = (byte[])m_SendQueue.Dequeue();
-                        m_NetworkStream.BeginWrite(bData, 0, bData.Length, new AsyncCallback(EndSend), null);
-                    }
-                    else
-                    {
-                        m_PendingSend = false;
-                    }
-                }
-                catch (Exception)
-                {
-                    Disconnect();
-                }
             }
         }
 

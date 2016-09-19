@@ -139,14 +139,14 @@ namespace agsXMPP
         /// <param name="iq">The IQ to send</param>
         /// <param name="timeout"></param>
         /// <returns>The response IQ or null on timeout</returns>
-        public IQ SendIq(agsXMPP.protocol.client.IQ iq, int timeout)
+        public IQ SendIq(IQ iq, int timeout)
         {
             synchronousResponse = null;
             AutoResetEvent are = new AutoResetEvent(false);
 
-            SendIq(iq, new IqCB(SynchronousIqResult), are);
+            SendIq(iq, SynchronousIqResult, are);
 
-            if (!are.WaitOne(timeout, true))
+            if (!are.WaitOne(timeout))
             {
                 // Timed out
                 lock (m_grabbing)

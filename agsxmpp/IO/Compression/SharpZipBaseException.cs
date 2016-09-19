@@ -44,7 +44,7 @@ namespace agsXMPP.IO.Compression
 	/// SharpZipBaseException is the base exception class for the SharpZipLibrary.
 	/// All library exceptions are derived from this.
 	/// </summary>
-	public class SharpZipBaseException : ApplicationException
+	public class SharpZipBaseException : Exception
 	{
 		/// <summary>
 		/// Initializes a new instance of the SharpZipLibraryException class.

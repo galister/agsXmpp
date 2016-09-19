@@ -21,23 +21,34 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using agsXMPP.protocol.iq.privacy;
 
 namespace agsXMPP.Xml.Dom
 {
-    public class ElementList : CollectionBase
+    public class ElementList : List<object>
     {
-        public void Add(Node e) 
+        public void Add(Element e) 
 		{
             // can't add a empty node, so return immediately
             // Some people tried dthis which caused an error
             if (e == null)
                 return;
             
-            List.Add(e);
-		}
-	
-		// Method implementation from the CollectionBase class
-		public void Remove(int index)
+            base.Add(e);
+        }
+        public void Add(Node e)
+        {
+            // can't add a empty node, so return immediately
+            // Some people tried dthis which caused an error
+            if (e == null)
+                return;
+
+            base.Add(e);
+        }
+
+        // Method implementation from the CollectionBase class
+        public void Remove(int index)
 		{
 			if (index > Count - 1 || index < 0) 
 			{
@@ -46,17 +57,12 @@ namespace agsXMPP.Xml.Dom
 				// This exception will be written to the calling function             
 				throw new Exception("Index out of bounds");            
 			}        
-			List.RemoveAt(index);			
-		}
-	
-		public void Remove(Element e)
-		{			
-			List.Remove(e);			
+			RemoveAt(index);			
 		}
 	
 		public Element Item(int index) 
 		{
-			return (Element) List[index];
+			return (Element) this[index];
 		}
     }
 }

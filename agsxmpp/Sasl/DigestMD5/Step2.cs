@@ -202,7 +202,8 @@ namespace agsXMPP.Sasl.DigestMD5
 			sb.Append(this.Password);
 			
 #if !CF
-			H1 =  new MD5CryptoServiceProvider().ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));
+		    using (var md5 = MD5.Create())
+		        H1 = md5.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));
 #else
 			//H1 = Encoding.Default.GetBytes(util.Hash.MD5Hash(sb.ToString()));
 			H1 = util.Hash.MD5Hash(Encoding.UTF8.GetBytes(sb.ToString()));
@@ -234,7 +235,8 @@ namespace agsXMPP.Sasl.DigestMD5
 			Array.Copy(H1, 0, bH1A1, 0, H1.Length);
 			Array.Copy(bA1, 0, bH1A1, H1.Length, bA1.Length);
 #if !CF
-			H1 =  new MD5CryptoServiceProvider().ComputeHash(bH1A1);			
+            using (var md5 = MD5.Create())
+                H1 = md5.ComputeHash(bH1A1);		
 			//Console.WriteLine(util.Hash.HexToString(H1));
 #else
 			//H1 = Encoding.Default.GetBytes(util.Hash.MD5Hash(sb.ToString()));
@@ -250,9 +252,10 @@ namespace agsXMPP.Sasl.DigestMD5
 			}
 			A2 = sb.ToString();
 			H2 = Encoding.ASCII.GetBytes(A2);
-			
+
 #if !CF
-			H2 = new MD5CryptoServiceProvider().ComputeHash(H2);
+            using (var md5 = MD5.Create())
+                H2 = md5.ComputeHash(H2);
 #else
 			//H2 = Encoding.Default.GetBytes(util.Hash.MD5Hash(H2));
 			H2 =util.Hash.MD5Hash(H2);
@@ -276,7 +279,8 @@ namespace agsXMPP.Sasl.DigestMD5
             
 			A3 = sb.ToString();
 #if !CF
-			H3 = new MD5CryptoServiceProvider().ComputeHash(Encoding.ASCII.GetBytes(A3));
+            using (var md5 = MD5.Create())
+                H3 = md5.ComputeHash(Encoding.ASCII.GetBytes(A3));
 #else
 			//H3 = Encoding.Default.GetBytes(util.Hash.MD5Hash(A3));
 			H3 =util.Hash.MD5Hash(Encoding.ASCII.GetBytes(A3));

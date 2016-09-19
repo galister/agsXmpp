@@ -20,7 +20,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
-
+using System.Diagnostics;
 #if SSL
 using System.Net.Security;
 #endif
@@ -97,32 +97,27 @@ namespace agsXMPP.Net
 
 		protected void FireOnConnect()
 		{
-			if (OnConnect != null)
-				OnConnect(this);
+		    OnConnect?.Invoke(this);
 		} 
 
 		protected void FireOnDisconnect()
-		{
-			if (OnDisconnect != null)
-				OnDisconnect(this);
+        {
+            OnDisconnect?.Invoke(this);
 		} 
 
 		protected void FireOnReceive(byte[] b, int length)
-		{
-			if (OnReceive != null)
-				OnReceive(this, b, length);
+        {
+            OnReceive?.Invoke(this, b, length);
 		} 
 	
 		protected void FireOnSend(byte[] b, int length)
-		{
-			if (OnSend != null)
-				OnSend(this, b, length);
+        {
+            OnSend?.Invoke(this, b, length);
 		}
 
 		protected void FireOnError(Exception ex)
-		{
-			if (OnError != null)
-				OnError(this, ex);
+        {
+            OnError?.Invoke(this, ex);
 		}
 
 #if SSL

@@ -154,7 +154,7 @@ namespace agsXMPP.Net
 #endif
         private int             m_Hold          = 1;    // should be 1
         private int             m_MaxPause      = 0;
-        private WebProxy        m_Proxy         = null;
+        private SimpleProxy     m_Proxy         = null;
                 
         public Jid To
         {
@@ -222,12 +222,9 @@ namespace agsXMPP.Net
             set { m_MaxPause = value; }
         }
 
-        public bool SupportsSessionPausing
-        {
-            get { return !(m_MaxPause == 0); }
-        }
+        public bool SupportsSessionPausing => m_MaxPause != 0;
 
-        public WebProxy Proxy
+        public SimpleProxy Proxy
         {
             get { return m_Proxy; }
             set { m_Proxy = value; }
@@ -402,10 +399,11 @@ namespace agsXMPP.Net
 
             req.Method          = METHOD;
             req.ContentType     = CONTENT_TYPE;
+            /*
             req.Timeout         = m_Wait * 1000;
             req.KeepAlive       = m_KeepAlive;
             req.ContentLength   = Encoding.UTF8.GetBytes(state.Output).Length; // state.Output.Length;
-
+            */
             try
             {
                 IAsyncResult result = req.BeginGetRequestStream(new AsyncCallback(this.OnGetSessionRequestStream), state);
@@ -415,7 +413,7 @@ namespace agsXMPP.Net
             }
         }
 
-        private void OnGetSessionRequestStream(IAsyncResult ar)
+        private async void OnGetSessionRequestStream(IAsyncResult ar)
         {
             try
             {
@@ -427,7 +425,8 @@ namespace agsXMPP.Net
                 byte[] bytes = Encoding.UTF8.GetBytes(state.Output);
 
                 state.RequestStream = outputStream;
-                IAsyncResult result = outputStream.BeginWrite(bytes, 0, bytes.Length, OnEndWrite, state);
+                await outputStream.WriteAsync(bytes, 0, bytes.Length, CancellationToken.None);
+
             }
             catch (WebException ex)
             {
@@ -444,54 +443,50 @@ namespace agsXMPP.Net
 
             //state.TimeOutTimer.Dispose();
 
-            // get the Response
-            HttpWebResponse resp = (HttpWebResponse)request.EndGetResponse(result);
+            int readlen;
+            byte[] readbuf = new byte[1024];
 
             // The server must always return a 200 response code,
             // sending any session errors as specially-formatted identifiers.
-            if (resp.StatusCode != HttpStatusCode.OK)
+
+            using(var resp = (HttpWebResponse)request.EndGetResponse(result))
+            using (var rs = resp.GetResponseStream())
+            using (var ms = new MemoryStream())
             {
-                return;
-            }
+                if (resp.StatusCode != HttpStatusCode.OK)
+                {
+                    return;
+                }
 
-            Stream rs = resp.GetResponseStream();
+                while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
+                {
+                    ms.Write(readbuf, 0, readlen);
+                }
 
-            int readlen;
-            byte[] readbuf = new byte[1024];
-            MemoryStream ms = new MemoryStream();
-            while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
-            {
-                ms.Write(readbuf, 0, readlen);
-            }
+                byte[] recv = ms.ToArray();
 
-            byte[] recv = ms.ToArray();
+                if (recv.Length > 0)
+                {
+                    string body = null;
+                    string stanzas = null;
 
-            if (recv.Length > 0)
-            {
-                string body = null;
-                string stanzas = null;
+                    string res = Encoding.UTF8.GetString(recv, 0, recv.Length);
 
-                string res = Encoding.UTF8.GetString(recv, 0, recv.Length);
+                    ParseResponse(res, ref body, ref stanzas);
 
-                ParseResponse(res, ref body, ref stanzas);
-              
-                Document doc = new Document();
-                doc.LoadXml(body);
-                Body boshBody = doc.RootElement as Body;
+                    Document doc = new Document();
+                    doc.LoadXml(body);
+                    Body boshBody = doc.RootElement as Body;
 
-                sid         = boshBody.Sid;
-                polling     = boshBody.Polling;
-                m_MaxPause  = boshBody.MaxPause;
+                    sid = boshBody.Sid;
+                    polling = boshBody.Polling;
+                    m_MaxPause = boshBody.MaxPause;
 
-                byte[] bin = Encoding.UTF8.GetBytes(DummyStreamHeader + stanzas);
-                
-                base.FireOnReceive(bin, bin.Length);
+                    byte[] bin = Encoding.UTF8.GetBytes(DummyStreamHeader + stanzas);
 
-                // cleanup webrequest resources
-                ms.Close();
-                rs.Close();
-                resp.Close();
-
+                    base.FireOnReceive(bin, bin.Length);
+                    
+                }
                 activeRequests--;
 
                 if (activeRequests == 0)
@@ -698,10 +693,11 @@ namespace agsXMPP.Net
 
             req.Method          = METHOD;
             req.ContentType     = CONTENT_TYPE;
+            /*
             req.Timeout         = m_Wait * 1000;
             req.KeepAlive       = m_KeepAlive;       
             req.ContentLength   = Encoding.UTF8.GetBytes(state.Output).Length;
-            
+            */
             // Create the delegate that invokes methods for the timer.            
             TimerCallback timerDelegate = TimeOutGetRequestStream;
             Timer timeoutTimer = new Timer(timerDelegate, state, WEBREQUEST_TIMEOUT, WEBREQUEST_TIMEOUT);
@@ -728,7 +724,7 @@ namespace agsXMPP.Net
             state.WebRequest.Abort();
         }
 
-        private void OnGetRequestStream(IAsyncResult ar)
+        private async void OnGetRequestStream(IAsyncResult ar)
         {
             try
             {
@@ -744,10 +740,24 @@ namespace agsXMPP.Net
                     state.TimeOutTimer.Dispose();
                     HttpWebRequest req = state.WebRequest as HttpWebRequest;
 
-                    Stream requestStream = req.EndGetRequestStream(ar);
-                    state.RequestStream = requestStream;
-                    byte[] bytes = Encoding.UTF8.GetBytes(state.Output);
-                    requestStream.BeginWrite(bytes, 0, bytes.Length, OnEndWrite, state);
+                    using (var requestStream = req.EndGetRequestStream(ar))
+                    {
+                        state.RequestStream = requestStream;
+                        byte[] bytes = Encoding.UTF8.GetBytes(state.Output);
+                        await requestStream.WriteAsync(bytes, 0, bytes.Length, CancellationToken.None);
+                    }
+                    try
+                    {
+                        if (state.IsSessionRequest)
+                            req.BeginGetResponse(OnGetSessionRequestResponse, state);
+                        else
+                            req.BeginGetResponse(OnGetResponse, state);
+
+                    }
+                    catch (Exception ex)
+                    {
+                        //Console.WriteLine(ex.Message);
+                    }
                 }
             }
             catch (Exception ex)
@@ -756,32 +766,6 @@ namespace agsXMPP.Net
 
                 WebRequestState state = ar.AsyncState as WebRequestState;
                 StartWebRequest(true, state.Output);
-            }
-        }
-
-        private void OnEndWrite(IAsyncResult ar)
-        {
-            WebRequestState state = ar.AsyncState as WebRequestState;
-
-            HttpWebRequest req      = state.WebRequest as HttpWebRequest;
-            Stream requestStream    = state.RequestStream;
-
-            requestStream.EndWrite(ar);
-            requestStream.Close();
-            
-            IAsyncResult result;
-            
-            try
-            {
-                if (state.IsSessionRequest)
-                    req.BeginGetResponse(OnGetSessionRequestResponse, state);            
-                else
-                    req.BeginGetResponse(OnGetResponse, state);     
-               
-            }
-            catch (Exception ex)
-            {
-                //Console.WriteLine(ex.Message);
             }
         }
 
@@ -840,57 +824,54 @@ namespace agsXMPP.Net
                 {
                     //Console.WriteLine("No response");
                 }
-
-                Stream rs = resp.GetResponseStream();
-
-                int readlen;
-                byte[] readbuf = new byte[1024];
-                MemoryStream ms = new MemoryStream();
-                while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
+                
+                using (var rs = resp.GetResponseStream())
+                using (var ms = new MemoryStream())
                 {
-                    ms.Write(readbuf, 0, readlen);
-                }
-
-                byte[] recv = ms.ToArray();
-
-                if (recv.Length > 0)
-                {
-                    string sbody = null;
-                    string stanzas = null;
-
-                    ParseResponse(Encoding.UTF8.GetString(recv, 0, recv.Length), ref sbody, ref stanzas);
-
-                    if (stanzas != null)
+                    int readlen;
+                    byte[] readbuf = new byte[1024];
+                    while ((readlen = rs.Read(readbuf, 0, readbuf.Length)) > 0)
                     {
-                        byte[] bStanzas = Encoding.UTF8.GetBytes(stanzas);
-                        base.FireOnReceive(bStanzas, bStanzas.Length);
+                        ms.Write(readbuf, 0, readlen);
                     }
-                    else
+
+                    byte[] recv = ms.ToArray();
+
+                    if (recv.Length > 0)
                     {
-                        if (sbody != null)
+                        string sbody = null;
+                        string stanzas = null;
+
+                        ParseResponse(Encoding.UTF8.GetString(recv, 0, recv.Length), ref sbody, ref stanzas);
+
+                        if (stanzas != null)
                         {
-                            var doc = new Document();
-                            doc.LoadXml(sbody);
-                            if (doc.RootElement != null)
+                            byte[] bStanzas = Encoding.UTF8.GetBytes(stanzas);
+                            base.FireOnReceive(bStanzas, bStanzas.Length);
+                        }
+                        else
+                        {
+                            if (sbody != null)
                             {
-                                var body = doc.RootElement as Body;
-                                if (body.Type == BoshType.terminate)
-                                    TerminateBoshSession();
+                                var doc = new Document();
+                                doc.LoadXml(sbody);
+                                if (doc.RootElement != null)
+                                {
+                                    var body = doc.RootElement as Body;
+                                    if (body.Type == BoshType.terminate)
+                                        TerminateBoshSession();
+                                }
+                            }
+
+                            if (terminate && !terminated)
+                            {
+                                // empty teminate response
+                                TerminateBoshSession();
                             }
                         }
-
-                        if (terminate && !terminated)
-                        {
-                            // empty teminate response
-                            TerminateBoshSession();
-                        }
                     }
                 }
-
-                // cleanup webrequest resources
-                ms.Close();
-                rs.Close();
-                resp.Close();
+                resp.Dispose();
 
                 activeRequests--;
                 requestIsTerminating = false;
@@ -931,5 +912,30 @@ namespace agsXMPP.Net
             base.FireOnReceive(bStanzas, bStanzas.Length);
             terminated = true;
         }
-    }    
+    }
+
+
+    public class SimpleProxy : IWebProxy
+    {
+        private readonly System.Uri _proxyUri;
+        public ICredentials Credentials { get; set; }
+
+        public SimpleProxy(string url, short port)
+        {
+            _proxyUri = new System.Uri(url+":"+port);
+        }
+        public SimpleProxy(Uri uri)
+        {
+            _proxyUri = new System.Uri(uri.ToString());
+        }
+        System.Uri IWebProxy.GetProxy(System.Uri destination)
+        {
+            return _proxyUri;
+        }
+
+        bool IWebProxy.IsBypassed(System.Uri host)
+        {
+            return host.IsLoopback;
+        }
+    }
 }
